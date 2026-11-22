@@ -1,8 +1,9 @@
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from src.database import Base, SessionLocal, engine
-from src.models import User, VesselCall, ContainerCheck, GateEvent, DelayCase, DispatchAction
+from src.models import User, VesselCall, ContainerCheck, GateEvent, DelayCase, DispatchAction, LabelVersion
 from src.security import hash_password
+from src.services import build_features
 
 
 def dt(day, hour, minute=0):
@@ -71,6 +72,34 @@ def seed():
         if not db.execute(select(DispatchAction).where(DispatchAction.action_type == "查验单证补录")).scalar_one_or_none():
             case = db.execute(select(DelayCase).where(DelayCase.case_no == "CASE-TRI-002")).scalar_one()
             db.add(DispatchAction(case_id=case.id, action_type="查验单证补录", assignee="海关联络岗", due_at=dt(21, 10), status="queued", instruction="等查验结束后补传查验回执"))
+        # 训练样本工作台演示数据：首次成功分级快照、模型标签、主管补标/更正、待补标案件
+        hai = vessel_by_no["CALL-HAI-20261121"]
+        hai.state = "closed"
+        hai.closed_at = dt(21, 14, 30)
+        north = vessel_by_no["CALL-NORTH-20261121"]
+        north.state = "closed"
+        north.closed_at = dt(21, 19, 30)
+        db.flush()
+        case_hai = db.execute(select(DelayCase).where(DelayCase.case_no == "CASE-HAI-001")).scalar_one()
+        if case_hai.feature_snapshot is None:
+            snapshot = dict(build_features(db, hai))
+            snapshot["dwell_x_reefer"] = round(snapshot["avg_gate_dwell_min"] * snapshot["reefer_ratio"], 3)
+            snapshot["gate_x_count"] = snapshot["gate_event_count"] * snapshot["container_count"]
+            case_hai.feature_snapshot = snapshot
+            case_hai.snapshot_at = dt(21, 8, 5)
+        if not db.execute(select(LabelVersion).where(LabelVersion.case_id == case_hai.id)).scalars().all():
+            v1 = LabelVersion(case_id=case_hai.id, version_no=1, label="major", source="model", status="superseded", created_by="worker", note="首次成功分级自动登记")
+            db.add(v1)
+            db.flush()
+            db.add(LabelVersion(case_id=case_hai.id, version_no=2, label="critical", source="correction", status="active", supersedes_id=v1.id, created_by="supervisor", note="靠泊复盘实际延误超过临界，主管更正"))
+        case_north = db.execute(select(DelayCase).where(DelayCase.case_no == "CASE-NORTH-004")).scalar_one()
+        if case_north.feature_snapshot is None:
+            snapshot = dict(build_features(db, north))
+            snapshot["dwell_x_reefer"] = round(snapshot["avg_gate_dwell_min"] * snapshot["reefer_ratio"], 3)
+            snapshot["gate_x_count"] = snapshot["gate_event_count"] * snapshot["container_count"]
+            case_north.feature_snapshot = snapshot
+            case_north.snapshot_at = dt(21, 12, 10)
+        # CASE-NORTH-004 靠泊已结束但主管尚未补标，出现在待补标列表
         db.commit()
     finally:
         db.close()

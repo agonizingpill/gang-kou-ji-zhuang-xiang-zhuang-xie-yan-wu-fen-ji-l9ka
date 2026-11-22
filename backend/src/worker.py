@@ -9,6 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from sqlalchemy import select
 from .database import Base, SessionLocal, engine
 from .models import AnalysisJob, DelayCase
+from .training_service import register_model_label
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 SHARED_DIR = Path(os.getenv("SHARED_DIR", "/shared"))
@@ -66,6 +67,8 @@ def run_job(job_id):
         result = {"label": label, "confidence": round(confidence, 4), "probabilities": {c: round(float(p), 4) for c, p in zip(classes, probs)}, "feature_keys": FEATURE_KEYS, "features": f, "formula": "手工交叉特征 = avg_gate_dwell_min×reefer_ratio, gate_event_count×container_count；StandardScaler + LogisticRegression(random_state=42)"}
         job.result = result; job.status = "succeeded"; job.finished_at = datetime.now(timezone.utc)
         case.model_output = result; case.final_level = label; case.status = "classified"; case.exception_reason = None
+        # 特征取案件首次成功分级时的输入；重试成功不覆盖，v1 模型标签也只登记一次
+        register_model_label(db, case, label, f, job.id)
         db.commit()
     except Exception as exc:
         job.status = "failed"; job.error = str(exc); job.finished_at = datetime.now(timezone.utc); db.commit()

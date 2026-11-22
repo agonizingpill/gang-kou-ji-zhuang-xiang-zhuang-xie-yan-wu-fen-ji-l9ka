@@ -25,6 +25,7 @@ class VesselCall(Base):
     etd: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     window_status: Mapped[str] = mapped_column(String(20), default="planned")
     state: Mapped[str] = mapped_column(String(20), default="open")
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     containers: Mapped[list["ContainerCheck"]] = relationship(back_populates="vessel", cascade="all, delete-orphan")
     cases: Mapped[list["DelayCase"]] = relationship(back_populates="vessel", cascade="all, delete-orphan")
@@ -67,12 +68,15 @@ class DelayCase(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     reason: Mapped[str] = mapped_column(Text, default="")
     feature_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    snapshot_job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    snapshot_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     model_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     exception_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     vessel: Mapped[VesselCall] = relationship(back_populates="cases")
     actions: Mapped[list["DispatchAction"]] = relationship(back_populates="case", cascade="all, delete-orphan")
+    label_versions: Mapped[list["LabelVersion"]] = relationship(back_populates="case", cascade="all, delete-orphan")
 
 class DispatchAction(Base):
     __tablename__ = "dispatch_actions"
@@ -108,3 +112,57 @@ class AuditLog(Base):
     entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     detail: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+class LabelVersion(Base):
+    """Append-only label versions for one delay case.
+
+    v1 is created by the worker at the first successful classification
+    (source=model). After berthing closes, the supervisor adds the actual
+    delay label via backfill (source=backfill) or corrects an existing
+    label (source=correction), which supersedes the prior active version.
+    """
+
+    __tablename__ = "label_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("delay_cases.id"), index=True)
+    version_no: Mapped[int] = mapped_column(Integer)
+    label: Mapped[str] = mapped_column(String(20))
+    source: Mapped[str] = mapped_column(String(20), default="model")
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    supersedes_id: Mapped[int | None] = mapped_column(ForeignKey("label_versions.id"), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(40))
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    case: Mapped[DelayCase] = relationship(back_populates="label_versions")
+    __table_args__ = (
+        UniqueConstraint("case_id", "version_no", name="uq_label_version_no"),
+    )
+
+class TrainingBatch(Base):
+    __tablename__ = "training_batches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_no: Mapped[str] = mapped_column(String(40), unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="sealing", index=True)
+    cutoff_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    item_count: Mapped[int] = mapped_column(Integer, default=0)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    items: Mapped[list["TrainingBatchItem"]] = relationship(back_populates="batch", cascade="all, delete-orphan")
+
+class TrainingBatchItem(Base):
+    __tablename__ = "training_batch_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("training_batches.id"), index=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("delay_cases.id"), index=True)
+    label_version_id: Mapped[int] = mapped_column(ForeignKey("label_versions.id"))
+    label: Mapped[str] = mapped_column(String(20))
+    feature_snapshot: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    batch: Mapped[TrainingBatch] = relationship(back_populates="items")
+    # 同一版标签不重复入批（跨批次全局唯一）
+    __table_args__ = (
+        UniqueConstraint("label_version_id", name="uq_batch_item_label_version"),
+        UniqueConstraint("batch_id", "case_id", name="uq_batch_item_case"),
+    )

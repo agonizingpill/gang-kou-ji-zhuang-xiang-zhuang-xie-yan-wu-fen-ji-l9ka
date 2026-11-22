@@ -21,7 +21,9 @@ def vessel_dict(v: VesselCall, db):
 def case_dict(c: DelayCase, db):
     jobs = db.execute(select(AnalysisJob).where(AnalysisJob.case_id == c.id).order_by(AnalysisJob.id.desc())).scalars().all()
     actions = [{"id": a.id, "action_type": a.action_type, "assignee": a.assignee, "due_at": a.due_at.isoformat(), "status": a.status, "instruction": a.instruction} for a in c.actions]
-    return {"id": c.id, "case_no": c.case_no, "vessel_id": c.vessel_id, "vessel": c.vessel.call_no if c.vessel else "", "vessel_name": c.vessel.vessel_name if c.vessel else "", "requested_level": c.requested_level, "final_level": c.final_level, "status": c.status, "reason": c.reason, "feature_snapshot": c.feature_snapshot, "model_output": c.model_output, "exception_reason": c.exception_reason, "jobs": [{"id": j.id, "status": j.status, "result": j.result, "error": j.error, "finished_at": j.finished_at.isoformat() if j.finished_at else None} for j in jobs], "actions": actions}
+    from .training_service import active_label, label_history
+    current = active_label(db, c.id)
+    return {"id": c.id, "case_no": c.case_no, "vessel_id": c.vessel_id, "vessel": c.vessel.call_no if c.vessel else "", "vessel_name": c.vessel.vessel_name if c.vessel else "", "berthing_closed": bool(c.vessel and c.vessel.closed_at), "requested_level": c.requested_level, "final_level": c.final_level, "status": c.status, "reason": c.reason, "feature_snapshot": c.feature_snapshot, "snapshot_job_id": c.snapshot_job_id, "snapshot_at": c.snapshot_at.isoformat() if c.snapshot_at else None, "model_output": c.model_output, "exception_reason": c.exception_reason, "active_label": ({"id": current.id, "version_no": current.version_no, "label": current.label, "source": current.source, "status": current.status} if current else None), "label_versions": [{"id": v.id, "version_no": v.version_no, "label": v.label, "source": v.source, "status": v.status, "created_by": v.created_by, "created_at": v.created_at.isoformat()} for v in label_history(db, c.id)], "jobs": [{"id": j.id, "status": j.status, "result": j.result, "error": j.error, "finished_at": j.finished_at.isoformat() if j.finished_at else None} for j in jobs], "actions": actions}
 
 @router.post("/auth/login")
 def login(payload: LoginIn, db: Session = Depends(get_db)):
@@ -109,7 +111,7 @@ def classify(case_id: int, db: Session = Depends(get_db), user: User = Depends(r
     case = db.get(DelayCase, case_id)
     if not case: raise HTTPException(404, "延误案件不存在")
     features, issues = domain_precheck(db, case.vessel)
-    case.feature_snapshot = features
+    # 特征快照只在首次成功分级时由 worker 固化；阻断或重试都不覆盖
     if issues:
         case.status = "blocked"; case.exception_reason = "；".join(issues); case.updated_at = datetime.now(timezone.utc)
         log(db, user, "triage_blocked", "delay_case", case.id, case.exception_reason); db.commit()

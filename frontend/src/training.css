@@ -1,0 +1,46 @@
+#training-workbench-open {position:fixed; right:1.25rem; bottom:1.25rem; z-index:25; border-radius:.55rem;
+  background:#233d63; color:white; border:1px solid #3a5d8c; padding:.65rem .9rem; cursor:pointer}
+#training-workbench-open[hidden] {display:none}
+#training-workbench {width:min(64rem, calc(100% - 1.5rem)); max-height:calc(100% - 2rem); overflow:auto;
+  border:1px solid #9ab0c8; border-radius:.9rem; padding:1.4rem; background:#f6f9fc; color:#16263a;
+  font:inherit; box-shadow:0 1.2rem 4rem #00142840}
+#training-workbench::backdrop {background:#101f33c4}
+#training-workbench header {display:flex; align-items:center; justify-content:space-between; gap:1rem}
+#training-workbench h2, #training-workbench h3, #training-workbench h4 {margin:.35rem 0 .75rem; color:#16263a}
+#training-workbench button, #training-workbench select, #training-workbench input {
+  font:inherit; color:inherit; border:1px solid #8aa3bd; border-radius:.4rem; background:white;
+  padding:.45rem .65rem; min-height:2.2rem; max-width:100%}
+#training-workbench button {cursor:pointer; background:#e8f0fa}
+#training-workbench button:disabled {opacity:.55; cursor:wait}
+#training-workbench .training-primary {background:#233d63; color:white; margin-top:.8rem}
+#training-workbench .training-feedback {color:#2c4f7c; min-height:1.35rem; margin:.35rem 0}
+#training-workbench .training-feedback.error {color:#a3332c}
+.training-root {display:grid; gap:1.1rem}
+.training-summary {display:grid; grid-template-columns:repeat(auto-fit, minmax(9rem, 1fr)); gap:.65rem}
+.training-summary div {background:#eaf1f9; border:1px solid #d2dfed; border-radius:.6rem; padding:.75rem .9rem;
+  display:flex; flex-direction:column; gap:.25rem}
+.training-summary span {font-size:.8rem; color:#54708e}
+.training-summary strong {font-size:1.5rem; color:#1d3557}
+.training-batches, .training-pending {background:white; border:1px solid #d7e1ec; border-radius:.7rem; padding:1rem}
+.training-batch-row, .training-case-row, .training-item-row {border:1px solid #dde6f0; border-radius:.55rem;
+  padding:.75rem .9rem; margin-bottom:.6rem; display:grid; gap:.35rem; background:#fbfdff}
+.training-batch-row > div:first-child, .training-row-actions {display:flex; align-items:center; gap:.7rem; flex-wrap:wrap}
+.training-batch-status {font-size:.78rem; padding:.15rem .5rem; border-radius:1rem}
+.training-batch-status.sealed {background:#e2f4ea; color:#1d6b43}
+.training-batch-status.sealing {background:#fff3d6; color:#8a6410}
+.training-batch-status.failed {background:#fde6e4; color:#a3332c}
+.training-case-row form {display:flex; flex-wrap:wrap; gap:.55rem; align-items:center; margin-top:.4rem}
+.training-case-row form input {flex:1 1 14rem}
+.training-pill {font-size:.78rem; padding:.15rem .55rem; border-radius:1rem; width:fit-content}
+.training-pill.level-normal {background:#e7f1ed; color:#2a6b52}
+.training-pill.level-watch {background:#fff3d6; color:#8a6410}
+.training-pill.level-major {background:#ffe8d9; color:#9a4a17}
+.training-pill.level-critical {background:#fde6e4; color:#a3332c}
+.training-pill.superseded {outline:1px dashed #9ab0c8}
+.training-item-row pre {background:#10233c; color:#cfe0f5; border-radius:.5rem; padding:.7rem;
+  font-size:.75rem; overflow:auto; max-height:16rem; margin:.3rem 0 0}
+.training-modal {position:fixed; inset:0; background:#101f33a8; display:flex; align-items:flex-start;
+  justify-content:center; padding:2rem 1rem; overflow:auto; z-index:30}
+.training-modal-panel {background:white; border-radius:.8rem; border:1px solid #c9d8e8; width:min(54rem, 100%);
+  padding:1.1rem; box-shadow:0 1rem 3rem #00142855}
+.training-modal-panel header {display:flex; justify-content:space-between; align-items:center}
